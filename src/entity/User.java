@@ -1,22 +1,64 @@
 package entity;
 
-public class User {
+import java.io.Serializable;
+
+public class User implements Serializable {
+	private static final long serialVersionUID = 7140074144500173010L;
 	private String ip;
 	private String name;
-	
-	public User(String userName, String ip) {
+	private int port;
+	private int score;
+
+	public User(String ip, String name, int port) {
 		super();
 		this.ip = ip;
-		this.name = userName;
+		this.name = name;
+		this.port = port;
+		this.score = 0;
 	}
+
+	public int getScore() {
+		return score;
+	}
+
+	public void setScore(int score) {
+		this.score = score;
+	}
+
+	public String getIp() {
+		return ip;
+	}
+
+	public void setIp(String ip) {
+		this.ip = ip;
+	}
+
+	public String getName() {
+		return name;
+	}
+
+	public void setName(String name) {
+		this.name = name;
+	}
+
+	public int getPort() {
+		return port;
+	}
+
+	public void setPort(int port) {
+		this.port = port;
+	}
+
 	@Override
 	public int hashCode() {
 		final int prime = 31;
 		int result = 1;
 		result = prime * result + ((ip == null) ? 0 : ip.hashCode());
 		result = prime * result + ((name == null) ? 0 : name.hashCode());
+		result = prime * result + port;
 		return result;
 	}
+
 	@Override
 	public boolean equals(Object obj) {
 		if (this == obj)
@@ -36,20 +78,14 @@ public class User {
 				return false;
 		} else if (!name.equals(other.name))
 			return false;
+		if (port != other.port)
+			return false;
 		return true;
 	}
-	public String getIp() {
-		return ip;
-	}
-	public void setIp(String ip) {
-		this.ip = ip;
-	}
-	public String getUserName() {
-		return name;
-	}
-	public void setUserName(String userName) {
-		this.name = userName;
-	}
 
+	@Override
+	public String toString() {
+		return "User [ip=" + ip + ", name=" + name + ", port=" + port + "]";
+	}
 
 }
