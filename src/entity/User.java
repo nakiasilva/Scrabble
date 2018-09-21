@@ -7,22 +7,12 @@ public class User implements Serializable {
 	private String ip;
 	private String name;
 	private int port;
-	private int score;
 
 	public User(String ip, String name, int port) {
 		super();
 		this.ip = ip;
 		this.name = name;
 		this.port = port;
-		this.score = 0;
-	}
-
-	public int getScore() {
-		return score;
-	}
-
-	public void setScore(int score) {
-		this.score = score;
 	}
 
 	public String getIp() {

@@ -8,6 +8,7 @@ import java.rmi.registry.LocateRegistry;
 import java.rmi.server.UnicastRemoteObject;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 
@@ -19,6 +20,7 @@ public class RemoteServer extends UnicastRemoteObject implements IRemoteServer {
 	private char[][] grid;
 	private HashSet<User> users;
 	private List<User> gamers;
+	private HashMap<User,Integer> scores;
 	private boolean startFlag;
 	private int passCount;
 
@@ -26,6 +28,7 @@ public class RemoteServer extends UnicastRemoteObject implements IRemoteServer {
 		grid = new char[20][20];
 		users = new HashSet<User>();
 		gamers = new ArrayList<User>();
+		scores = new HashMap<User, Integer>();
 		startFlag = false;
 		passCount = 0;
 
@@ -60,7 +63,7 @@ public class RemoteServer extends UnicastRemoteObject implements IRemoteServer {
 		startFlag = true;
 		passCount = 0;
 		for (User newGamer : newGamers) {
-			newGamer.setScore(0);
+			scores.put(newGamer, 0);
 			gamers.add(newGamer);
 			((IRemoteClient) LocateRegistry.getRegistry(newGamer.getIp(), newGamer.getPort())
 					.lookup(newGamer.getName())).refreshGrid(grid);
@@ -85,13 +88,13 @@ public class RemoteServer extends UnicastRemoteObject implements IRemoteServer {
 		int count = 0;
 		for (User gamer : gamers) {
 			if (((IRemoteClient) LocateRegistry.getRegistry(gamer.getIp(), gamer.getPort()).lookup(gamer.getName()))
-					.vote()) {
+					.vote(x1,y1,x2,y2,grid)) {
 				count++;
 			}
 		}
 		if (count >= gamers.size() / 2) {
 			int score = (x1 == x2) ? 1 + Math.abs(y1 - y2) : 1 + Math.abs(x1 - x2);
-			user.setScore(user.getScore() + score);
+			scores.put(user, scores.get(user)+score);
 		}
 		int index = gamers.indexOf(user);
 		User nextGamer = gamers.get(index == gamers.size() - 1 ? 0 : index + 1);
@@ -106,7 +109,7 @@ public class RemoteServer extends UnicastRemoteObject implements IRemoteServer {
 			passCount = 0;
 			for (User gamer : gamers) {
 				((IRemoteClient) LocateRegistry.getRegistry(gamer.getIp(), gamer.getPort()).lookup(gamer.getName()))
-						.endGame(gamer.getScore());
+						.endGame(scores.get(user));
 			}
 		} else {
 			int index = gamers.indexOf(user);

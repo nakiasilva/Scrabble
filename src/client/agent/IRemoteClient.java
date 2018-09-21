@@ -14,5 +14,5 @@ public interface IRemoteClient extends Remote {
 	public void endGame(int score) throws RemoteException;
 	public void showUserList(HashSet<User> users) throws AccessException, RemoteException, NotBoundException;
 	public void claim() throws AccessException, RemoteException, NotBoundException;
-	public boolean vote() throws RemoteException;
+	public boolean vote(int x1, int y1, int x2, int y2, char[][] grid) throws RemoteException;
 }
