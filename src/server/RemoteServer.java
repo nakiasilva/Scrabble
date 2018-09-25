@@ -1,7 +1,6 @@
 package server;
 
 import java.io.IOException;
-import java.rmi.AccessException;
 import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
@@ -20,7 +19,7 @@ public class RemoteServer extends UnicastRemoteObject implements IRemoteServer {
 	private char[][] grid;
 	private HashSet<User> users;
 	private List<User> gamers;
-	private HashMap<User,Integer> scores;
+	private HashMap<User, Integer> scores;
 	private boolean startFlag;
 	private int passCount;
 
@@ -34,90 +33,174 @@ public class RemoteServer extends UnicastRemoteObject implements IRemoteServer {
 
 	}
 
-	public void login(User newUser) throws AccessException, RemoteException, NotBoundException {
+	public void login(User newUser) throws RemoteException {
 		users.add(newUser);
-		for (User user : users) {
+
+		users.parallelStream().forEach(user -> {
 			if (startFlag == false || !gamers.contains(user)) {
-				((IRemoteClient) LocateRegistry.getRegistry(user.getIp(), user.getPort()).lookup(user.getName()))
-						.showUserList(users);
+				try {
+					getRemoteClient(user).showUserList(users);
+				} catch (RemoteException | NotBoundException e) {
+					System.out.println("User: " + user.toString() + " is disconnected");
+					users.remove(user);
+					e.printStackTrace();
+				}
 			}
-		}
+		});
 	}
 
-	public void logoff(User expiredUser) throws AccessException, RemoteException, NotBoundException {
+	public void logoff(User expiredUser) throws RemoteException {
 		users.remove(expiredUser);
-		for (User user : users) {
+		users.parallelStream().forEach(user -> {
 			if (startFlag == false || !gamers.contains(user)) {
-				((IRemoteClient) LocateRegistry.getRegistry(user.getIp(), user.getPort()).lookup(user.getName()))
-						.showUserList(users);
+				try {
+					getRemoteClient(user).showUserList(users);
+				} catch (RemoteException | NotBoundException e) {
+					System.out.println("User: " + user.toString() + " is disconnected");
+					users.remove(user);
+					e.printStackTrace();
+				}
 			}
-		}
+		});
 	}
 
-	public boolean startGame(List<User> newGamers) throws AccessException, RemoteException, NotBoundException {
-		if (startFlag)
+	public boolean startGame(List<User> newGamers) throws RemoteException {
+		if (startFlag) {
 			return false;
+		}
 
 		grid = new char[20][20];
 		gamers = new ArrayList<User>();
+		scores = new HashMap<User, Integer>();
 		startFlag = true;
 		passCount = 0;
-		for (User newGamer : newGamers) {
-			scores.put(newGamer, 0);
-			gamers.add(newGamer);
-			((IRemoteClient) LocateRegistry.getRegistry(newGamer.getIp(), newGamer.getPort())
-					.lookup(newGamer.getName())).refreshGrid(grid);
-		}
-		((IRemoteClient) LocateRegistry.getRegistry(newGamers.get(0).getIp(), newGamers.get(0).getPort())
-				.lookup(newGamers.get(0).getName())).startNewTurn();
-		return true;
-	}
 
-	public void placeChar(int x, int y, char c, User user) throws AccessException, RemoteException, NotBoundException {
-		grid[x][y] = c;
-		for (User gamer : gamers) {
-			((IRemoteClient) LocateRegistry.getRegistry(gamer.getIp(), gamer.getPort()).lookup(gamer.getName()))
-					.refreshGrid(grid);
-		}
-		passCount = 0;
-		((IRemoteClient) LocateRegistry.getRegistry(user.getIp(), user.getPort()).lookup(user.getName())).claim();
-	}
-
-	public void vote(int x1, int y1, int x2, int y2, User user)
-			throws AccessException, RemoteException, NotBoundException {
-		int count = 0;
-		for (User gamer : gamers) {
-			if (((IRemoteClient) LocateRegistry.getRegistry(gamer.getIp(), gamer.getPort()).lookup(gamer.getName()))
-					.vote(x1,y1,x2,y2,grid)) {
-				count++;
+		int connectedGammers = newGamers.parallelStream().mapToInt(newGamer -> {
+			try {
+				scores.put(newGamer, 0);
+				gamers.add(newGamer);
+				getRemoteClient(newGamer).refreshGrid(grid);
+				return 1;
+			} catch (RemoteException | NotBoundException e) {
+				System.out.println("New gamer: " + newGamer.toString() + " is disconnected");
+				e.printStackTrace();
+				return 0;
 			}
+		}).sum();
+
+		try {
+			if (connectedGammers == newGamers.size()) {
+				getRemoteClient(newGamers.get(0)).startNewTurn();
+				return true;
+			}
+		} catch (NotBoundException e) {
+			System.out.println("The first gamer: " + newGamers.get(0).toString() + " is disconnected");
+			e.printStackTrace();
 		}
+
+		gracefulShutDown();
+		return false;
+	}
+
+	public boolean placeChar(int x, int y, char c, User user) throws RemoteException {
+		grid[x][y] = c;
+
+		int connectedGamers = gamers.parallelStream().mapToInt(gamer -> {
+			try {
+				getRemoteClient(gamer).refreshGrid(grid);
+				return 1;
+			} catch (RemoteException | NotBoundException e) {
+				System.out.println("Gamer: " + gamer.toString() + " is disconnected");
+				e.printStackTrace();
+				return 0;
+			}
+		}).sum();
+		passCount = 0;
+
+		try {
+			if (connectedGamers == gamers.size()) {
+				getRemoteClient(user).claim();
+				return true;
+			}
+
+		} catch (NotBoundException e) {
+			System.out.println("Gamer: " + user.toString() + " is disconnected");
+			e.printStackTrace();
+		}
+
+		gracefulShutDown();
+		return false;
+	}
+
+	public boolean vote(int x1, int y1, int x2, int y2, User user) throws RemoteException {
+		int count = gamers.parallelStream().mapToInt(gamer -> {
+			try {
+				if (getRemoteClient(gamer).vote(x1, y1, x2, y2, grid)) {
+					return 1;
+				} else {
+					return 0;
+				}
+			} catch (RemoteException | NotBoundException e) {
+				System.out.println("Gamer: " + gamer.toString() + " is disconnected during voting");
+				e.printStackTrace();
+			}
+			return -1 - gamers.size();
+		}).sum();
+
 		if (count >= gamers.size() / 2) {
 			int score = (x1 == x2) ? 1 + Math.abs(y1 - y2) : 1 + Math.abs(x1 - x2);
-			scores.put(user, scores.get(user)+score);
+			scores.put(user, scores.get(user) + score);
 		}
-		int index = gamers.indexOf(user);
-		User nextGamer = gamers.get(index == gamers.size() - 1 ? 0 : index + 1);
-		((IRemoteClient) LocateRegistry.getRegistry(nextGamer.getIp(), nextGamer.getPort()).lookup(nextGamer.getName()))
-				.startNewTurn();
+
+		try {
+			if (count >= 0) {
+				int index = gamers.indexOf(user);
+				user = gamers.get(index == gamers.size() - 1 ? 0 : index + 1);
+				getRemoteClient(user).startNewTurn();
+				return true;
+			}
+		} catch (NotBoundException e) {
+			System.out.println("Gamer: " + user.toString() + " is disconnected");
+			e.printStackTrace();
+		}
+
+		gracefulShutDown();
+		return false;
+
 	}
 
-	public void pass(User user) throws AccessException, RemoteException, NotBoundException {
+	public boolean pass(User user) throws RemoteException {
 		passCount++;
-		if (passCount == gamers.size()) {
-			startFlag = false;
-			passCount = 0;
-			for (User gamer : gamers) {
-				((IRemoteClient) LocateRegistry.getRegistry(gamer.getIp(), gamer.getPort()).lookup(gamer.getName()))
-						.endGame(scores.get(user));
+		try {
+			if (passCount < gamers.size()) {
+				int index = gamers.indexOf(user);
+				user = gamers.get(index == gamers.size() - 1 ? 0 : index + 1);
+				getRemoteClient(user).startNewTurn();
+				return true;
 			}
-		} else {
-			int index = gamers.indexOf(user);
-			User nextGamer = gamers.get(index == gamers.size() - 1 ? 0 : index + 1);
-			((IRemoteClient) LocateRegistry.getRegistry(nextGamer.getIp(), nextGamer.getPort())
-					.lookup(nextGamer.getName())).startNewTurn();
-
+		} catch (NotBoundException e) {
+			System.out.println("Gamer: " + user.toString() + " is disconnected");
+			e.printStackTrace();
 		}
+		gracefulShutDown();
+		return false;
+	}
+
+	private IRemoteClient getRemoteClient(User user) throws RemoteException, NotBoundException {
+		return (IRemoteClient) LocateRegistry.getRegistry(user.getIp(), user.getPort()).lookup(user.getName());
+	}
+
+	private void gracefulShutDown() {
+		gamers.parallelStream().forEach(gamer -> {
+			try {
+				getRemoteClient(gamer).endGame(scores.get(gamer));
+			} catch (RemoteException | NotBoundException e) {
+				System.out.println("Gamer: " + gamer.toString() + " is disconnected");
+				users.remove(gamer);
+				e.printStackTrace();
+			}
+		});
+		startFlag = false;
 	}
 
 }
