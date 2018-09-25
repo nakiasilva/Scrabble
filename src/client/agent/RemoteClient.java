@@ -6,9 +6,9 @@ import java.rmi.RemoteException;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Scanner;
+import java.util.Set;
 
 import entity.User;
 import server.IRemoteServer;
@@ -39,7 +39,7 @@ public class RemoteClient extends UnicastRemoteObject implements IRemoteClient {
 	// GUI 3. show active user list, with invitation function to start a game, like
 	// check box
 	@Override
-	public void showUserList(HashSet<User> users) throws AccessException, RemoteException, NotBoundException {
+	public void showUserList(Set<User> users) throws AccessException, RemoteException, NotBoundException {
 		// show List of uers
 		for (User user : users) {
 			System.out.println(user);
@@ -47,9 +47,7 @@ public class RemoteClient extends UnicastRemoteObject implements IRemoteClient {
 
 		// start new game
 		List<User> gamers = new ArrayList<User>();
-		for (User user : users) {
-			gamers.add(user);
-		}
+		gamers.addAll(users);
 		((IRemoteServer) registry.lookup("server")).startGame(gamers);
 	}
 
