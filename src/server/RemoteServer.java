@@ -6,13 +6,11 @@ import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.server.UnicastRemoteObject;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
 import client.agent.IRemoteClient;
@@ -21,46 +19,44 @@ import entity.User;
 @SuppressWarnings("serial")
 public class RemoteServer extends UnicastRemoteObject implements IRemoteServer {
 	private char[][] grid;
-	private Set<User> users;
 	private List<User> gamers;
-	private Map<User, Integer> scores;
+	private Map<User, Integer> users;
 	private boolean startFlag;
 	private int passCount;
 
 	public RemoteServer() throws IOException, SQLException {
 		grid = new char[20][20];
-		users = Collections.synchronizedSet(new HashSet<User>());
-		gamers = Collections.synchronizedList(new ArrayList<User>());
-		scores = Collections.synchronizedMap(new HashMap<User, Integer>());
+		gamers = new CopyOnWriteArrayList<User>();
+		users = new ConcurrentHashMap<User, Integer>();
 		startFlag = false;
 		passCount = 0;
 
 	}
 
-	public void login(User newUser) throws RemoteException {
-		users.add(newUser);
+	public void login(User newUser) {
+		users.put(newUser, 0);
 		showActiveUsers();
 	}
 
-	public void logoff(User expiredUser) throws RemoteException {
+	public void logoff(User expiredUser) {
 		users.remove(expiredUser);
 		showActiveUsers();
 	}
 
-	public boolean startGame(List<User> newGamers) throws RemoteException {
+	public boolean startGame(List<User> newGamers) {
 		if (startFlag) {
 			return false;
 		}
 
 		grid = new char[20][20];
-		gamers = Collections.synchronizedList(new ArrayList<User>());
-		scores = Collections.synchronizedMap(new HashMap<User, Integer>());
+		gamers = new CopyOnWriteArrayList<User>();
+		users = new ConcurrentHashMap<User, Integer>();
 		startFlag = true;
 		passCount = 0;
 
 		int connectedGammers = newGamers.parallelStream().mapToInt(newGamer -> {
 			try {
-				scores.put(newGamer, 0);
+				users.put(newGamer, 0);
 				gamers.add(newGamer);
 				getRemoteClient(newGamer).refreshGrid(grid);
 				return 1;
@@ -76,7 +72,7 @@ public class RemoteServer extends UnicastRemoteObject implements IRemoteServer {
 				getRemoteClient(newGamers.get(0)).startNewTurn();
 				return true;
 			}
-		} catch (NotBoundException e) {
+		} catch (NotBoundException | RemoteException e) {
 			System.out.println("The first gamer: " + newGamers.get(0).toString() + " is disconnected\n");
 			e.printStackTrace();
 		}
@@ -85,7 +81,7 @@ public class RemoteServer extends UnicastRemoteObject implements IRemoteServer {
 		return false;
 	}
 
-	public boolean placeChar(int x, int y, char c, User user) throws RemoteException {
+	public boolean placeChar(int x, int y, char c, User user) {
 		grid[x][y] = c;
 
 		int connectedGamers = gamers.parallelStream().mapToInt(gamer -> {
@@ -106,7 +102,7 @@ public class RemoteServer extends UnicastRemoteObject implements IRemoteServer {
 				return true;
 			}
 
-		} catch (NotBoundException e) {
+		} catch (NotBoundException | RemoteException e) {
 			System.out.println("Gamer: " + user.toString() + " is disconnected\n");
 			e.printStackTrace();
 		}
@@ -115,7 +111,7 @@ public class RemoteServer extends UnicastRemoteObject implements IRemoteServer {
 		return false;
 	}
 
-	public boolean vote(int x1, int y1, int x2, int y2, User user) throws RemoteException {
+	public boolean vote(int x1, int y1, int x2, int y2, User user) {
 		int count = gamers.parallelStream().mapToInt(gamer -> {
 			try {
 				if (getRemoteClient(gamer).vote(x1, y1, x2, y2, grid)) {
@@ -132,7 +128,7 @@ public class RemoteServer extends UnicastRemoteObject implements IRemoteServer {
 
 		if (count >= gamers.size() / 2) {
 			int score = (x1 == x2) ? 1 + Math.abs(y1 - y2) : 1 + Math.abs(x1 - x2);
-			scores.put(user, scores.get(user) + score);
+			users.put(user, users.get(user) + score);
 		}
 
 		try {
@@ -142,7 +138,7 @@ public class RemoteServer extends UnicastRemoteObject implements IRemoteServer {
 				getRemoteClient(user).startNewTurn();
 				return true;
 			}
-		} catch (NotBoundException e) {
+		} catch (NotBoundException | RemoteException e) {
 			System.out.println("Gamer: " + user.toString() + " is disconnected\n");
 			e.printStackTrace();
 		}
@@ -152,7 +148,7 @@ public class RemoteServer extends UnicastRemoteObject implements IRemoteServer {
 
 	}
 
-	public boolean pass(User user) throws RemoteException {
+	public boolean pass(User user) {
 		passCount++;
 		try {
 			if (passCount < gamers.size()) {
@@ -161,7 +157,7 @@ public class RemoteServer extends UnicastRemoteObject implements IRemoteServer {
 				getRemoteClient(user).startNewTurn();
 				return true;
 			}
-		} catch (NotBoundException e) {
+		} catch (NotBoundException | RemoteException e) {
 			System.out.println("Gamer: " + user.toString() + " is disconnected\n");
 			e.printStackTrace();
 		}
@@ -174,21 +170,23 @@ public class RemoteServer extends UnicastRemoteObject implements IRemoteServer {
 	}
 
 	private void showActiveUsers() {
-		Set<User> disconnectedUsers = users.parallelStream().map(user -> {
+		Set<User> disconnectedUsers = users.keySet().parallelStream().map(user -> {
 			if (startFlag == false || !gamers.contains(user)) {
 				try {
-					getRemoteClient(user).showUserList(users);
-					return null;
+					getRemoteClient(user).showUserList(users.keySet());
 				} catch (RemoteException | NotBoundException e) {
 					System.out.println("User: " + user.toString() + " is disconnected\n");
 					e.printStackTrace();
+					return user;
 				}
 			}
-			return user;
+			return null;
 		}).filter(i -> i != null).collect(Collectors.toSet());
 
 		if (disconnectedUsers.size() > 0) {
-			users.removeAll(disconnectedUsers);
+			for(User user : disconnectedUsers) {
+				users.remove(user);
+			}
 			showActiveUsers();
 		}
 	}
@@ -196,13 +194,14 @@ public class RemoteServer extends UnicastRemoteObject implements IRemoteServer {
 	private void gracefulShutDown() {
 		gamers.parallelStream().forEach(gamer -> {
 			try {
-				getRemoteClient(gamer).endGame(scores.get(gamer));
+				getRemoteClient(gamer).endGame(users.get(gamer));
 			} catch (RemoteException | NotBoundException e) {
 				System.out.println("Gamer: " + gamer.toString() + " is disconnected\n");
 				users.remove(gamer);
 				e.printStackTrace();
 			}
 		});
+		showActiveUsers();
 		startFlag = false;
 	}
 
