@@ -10,14 +10,37 @@ import java.util.List;
 import java.util.Scanner;
 import java.util.Set;
 
+import javax.swing.JTextArea;
+
 import entity.User;
 import server.IRemoteServer;
 
 @SuppressWarnings("serial")
 public class RemoteClient extends UnicastRemoteObject implements IRemoteClient {
+	
+
+
 	private Registry registry;
 	private User user;
 	Scanner sc = new Scanner(System.in);
+	private JTextArea textArea;
+	private ArrayList<User> gamers;
+	
+	public ArrayList<User> getGamers() {
+		return gamers;
+	}
+
+	public void setGamers(ArrayList<User> gamers) {
+		this.gamers = gamers;
+	}
+
+	public JTextArea getTextArea() {
+		return textArea;
+	}
+
+	public void setTextArea(JTextArea textArea) {
+		this.textArea = textArea;
+	}
 
 	public RemoteClient(Registry registry, User user) throws RemoteException {
 		this.registry = registry;
@@ -40,16 +63,34 @@ public class RemoteClient extends UnicastRemoteObject implements IRemoteClient {
 	// check box
 	@Override
 	public void showUserList(Set<User> users) throws AccessException, RemoteException, NotBoundException {
-		// show List of uers
-		for (User user : users) {
-			System.out.println(user);
+		// show List of users
+		textArea.append("The list of users connected:" );
+		gamers=new ArrayList<User>();
+		for (User user1 : users) {
+			gamers.add(user1);
+			System.out.println(user1);
+			textArea.append("\n");
+			textArea.append("Name: "+user1.getName());
+			textArea.append("  Port Number: "+user1.getPort());
+			textArea.append("  IP Address: "+user1.getIp());
+			
 		}
+		
 
 		// start new game
-		List<User> gamers = new ArrayList<User>();
-		gamers.addAll(users);
+	//List<User> gamers = new ArrayList<User>();
+	gamers.addAll(users);
+	return;
+//		((IRemoteServer) registry.lookup("server")).startGame(gamers);
+	}
+	
+	//Start Game
+	@Override
+	public void startGame() throws AccessException, RemoteException, NotBoundException {
+		
 		((IRemoteServer) registry.lookup("server")).startGame(gamers);
 	}
+	
 
 	// GUI 4. refresh the whole grids
 	@Override
@@ -109,7 +150,6 @@ public class RemoteClient extends UnicastRemoteObject implements IRemoteClient {
 
 		System.out.println("Decision for voting?");
 		
-
 		// a button for votte
 		return sc.nextBoolean();
 	}

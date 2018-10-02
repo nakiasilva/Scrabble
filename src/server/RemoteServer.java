@@ -47,7 +47,6 @@ public class RemoteServer extends UnicastRemoteObject implements IRemoteServer {
 		if (startFlag) {
 			return false;
 		}
-
 		grid = new char[20][20];
 		gamers = new CopyOnWriteArrayList<User>();
 		users = new ConcurrentHashMap<User, Integer>();

@@ -12,7 +12,7 @@ public class ServerAgent {
 		LocateRegistry.createRegistry(19140);
 		Registry registry = LocateRegistry.getRegistry("localhost", 19140);
 		registry.rebind("server", server);		
-		
+		System.out.println("end");
 		
 	}
 
